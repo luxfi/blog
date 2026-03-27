@@ -22,7 +22,9 @@ export function SiteNav() {
         <nav className="flex items-center gap-4 text-sm text-muted-foreground">
           <a href="https://lux.network" className="hover:text-foreground transition-colors">lux.network</a>
           <a href="https://docs.lux.network" className="hover:text-foreground transition-colors hidden sm:block">docs</a>
-          <a href="https://explorer.lux.network" className="hover:text-foreground transition-colors hidden sm:block">explorer</a>
+          <a href="https://proofs.lux.network" className="hover:text-foreground transition-colors hidden sm:block">proofs</a>
+          <a href="https://hanzo.blog" className="hover:text-foreground transition-colors hidden sm:block">hanzo</a>
+          <a href="https://blog.zoo.ngo" className="hover:text-foreground transition-colors hidden sm:block">zoo</a>
           <a
             href="https://discord.gg/luxnetwork"
             target="_blank"
