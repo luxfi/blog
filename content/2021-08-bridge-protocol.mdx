@@ -1,0 +1,292 @@
+---
+title: "Bridge Protocol: Trustless Cross-Chain Communication"
+date: "2021-08-25"
+author: "Zach Kelling"
+tags: ["bridge", "cross-chain", "interoperability", "technical"]
+description: "Introducing the Lux Bridge Protocol for secure, decentralized asset transfers between Lux and external networks."
+---
+
+Cross-chain bridges have become critical infrastructure. They've also become critical vulnerabilities: over $2B lost to bridge exploits in 2021 alone. Today we introduce the Lux Bridge Protocol, designed from first principles for security.
+
+## The Bridge Security Problem
+
+Most bridges share a fatal flaw: trust assumptions.
+
+```
+Traditional Bridge Architecture:
+
+[Chain A] ──► [Multisig / MPC] ──► [Chain B]
+                    │
+                    └── Trust Assumption
+                        (Usually 3-of-5 or similar)
+```
+
+When the trusted party is compromised (keys stolen, validators collude, or social engineering), funds are lost. Forever.
+
+## Lux Bridge Design
+
+Our bridge minimizes trust through three mechanisms:
+
+1. **Proof verification on both chains**
+2. **Economic security through staking**
+3. **Fraud proofs with slashing**
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────┐
+│                Lux Bridge Protocol               │
+│                                                  │
+│  ┌──────────────┐         ┌──────────────┐     │
+│  │   Chain A    │         │   Chain B    │     │
+│  │  ┌────────┐  │         │  ┌────────┐  │     │
+│  │  │ Bridge │  │◄───────►│  │ Bridge │  │     │
+│  │  │Contract│  │  Proofs │  │Contract│  │     │
+│  │  └────────┘  │         │  └────────┘  │     │
+│  └──────────────┘         └──────────────┘     │
+│           │                       │             │
+│           └───────────┬───────────┘             │
+│                       │                         │
+│              ┌────────┴────────┐                │
+│              │   Relay Network  │                │
+│              │   (Staked nodes) │                │
+│              └─────────────────┘                │
+└─────────────────────────────────────────────────┘
+```
+
+### Component 1: Light Client Verification
+
+Each bridge contract maintains a light client of the counterparty chain:
+
+```solidity
+contract LuxBridge {
+    // Ethereum block headers
+    mapping(uint256 => BlockHeader) public headers;
+
+    // Verified block height
+    uint256 public verifiedHeight;
+
+    // Submit new headers (anyone can call)
+    function submitHeaders(BlockHeader[] calldata newHeaders) external {
+        for (uint i = 0; i < newHeaders.length; i++) {
+            require(verifyHeader(newHeaders[i]), "Invalid header");
+            headers[newHeaders[i].number] = newHeaders[i];
+        }
+        updateVerifiedHeight();
+    }
+
+    // Verify a transaction was included
+    function verifyTransaction(
+        bytes calldata txData,
+        bytes calldata proof,
+        uint256 blockNumber
+    ) public view returns (bool) {
+        require(blockNumber <= verifiedHeight, "Block not verified");
+        return verifyMerkleProof(
+            headers[blockNumber].transactionsRoot,
+            txData,
+            proof
+        );
+    }
+}
+```
+
+### Component 2: Relay Network
+
+Relayers stake LUX tokens and submit cross-chain messages:
+
+```solidity
+contract RelayerRegistry {
+    uint256 public constant MIN_STAKE = 10000 * 1e18; // 10,000 LUX
+
+    mapping(address => uint256) public stakes;
+    mapping(address => uint256) public slashableUntil;
+
+    function register() external payable {
+        require(msg.value >= MIN_STAKE, "Insufficient stake");
+        stakes[msg.sender] += msg.value;
+    }
+
+    function submitMessage(
+        bytes calldata message,
+        bytes calldata proof
+    ) external onlyRegistered {
+        require(verifyProof(message, proof), "Invalid proof");
+        processMessage(message);
+
+        // Stake is slashable for challenge period
+        slashableUntil[msg.sender] = block.timestamp + CHALLENGE_PERIOD;
+    }
+}
+```
+
+### Component 3: Fraud Proofs
+
+Anyone can challenge an invalid relay:
+
+```solidity
+contract FraudProver {
+    uint256 public constant CHALLENGE_PERIOD = 7 days;
+    uint256 public constant REWARD_PERCENTAGE = 50;
+
+    function challengeRelay(
+        bytes32 messageHash,
+        bytes calldata fraudProof
+    ) external {
+        RelayedMessage memory msg = relayedMessages[messageHash];
+        require(block.timestamp < msg.slashableUntil, "Challenge period ended");
+
+        // Verify the fraud proof
+        require(verifyFraud(msg, fraudProof), "Not fraudulent");
+
+        // Slash the relayer
+        uint256 slashAmount = relayerStakes[msg.relayer];
+        relayerStakes[msg.relayer] = 0;
+
+        // Reward challenger
+        uint256 reward = slashAmount * REWARD_PERCENTAGE / 100;
+        payable(msg.sender).transfer(reward);
+
+        // Burn the rest (no profit from self-slashing)
+        burn(slashAmount - reward);
+
+        // Revert the message
+        revertMessage(messageHash);
+    }
+}
+```
+
+## Cross-Chain Transfer Flow
+
+### Lux to Ethereum
+
+```
+1. User locks LUX on Lux Bridge Contract
+   └── Emits: Lock(user, amount, destAddress)
+
+2. Relayers observe the lock transaction
+   └── Wait for finality (~2 seconds on Lux)
+
+3. Relayer submits to Ethereum with proof
+   └── submitMessage(lockProof, luxBlockHeader)
+
+4. Ethereum Bridge verifies:
+   └── a) Block header is valid (in verified chain)
+   └── b) Transaction is in block (Merkle proof)
+   └── c) Lock event matches claim
+
+5. If valid, mint wLUX to user on Ethereum
+   └── 7-day challenge period begins
+
+6. After challenge period, transfer is final
+```
+
+### Ethereum to Lux
+
+```
+1. User burns wLUX on Ethereum Bridge
+   └── Emits: Burn(user, amount, destAddress)
+
+2. Relayers observe (wait for ~15 min finality)
+
+3. Relayer submits to Lux with proof
+   └── Includes Ethereum block headers + receipt proof
+
+4. Lux Bridge verifies:
+   └── a) Block headers form valid chain
+   └── b) Sufficient confirmations (~64 blocks)
+   └── c) Burn receipt is authentic
+
+5. If valid, unlock LUX to user
+   └── Immediate (Lux has fast finality)
+```
+
+## Security Analysis
+
+### Attack Vectors and Mitigations
+
+| Attack | Mitigation |
+|--------|-----------|
+| Relayer collusion | Economic: stake > bridge TVL |
+| Light client eclipse | Multiple header sources required |
+| Reorg attack | Wait for finality + confirmations |
+| Smart contract bug | Audits + formal verification |
+| Key compromise | No admin keys, upgrades via governance |
+
+### Economic Security
+
+For the bridge to be secure:
+```
+Total Relayer Stake > Expected Bridge TVL
+```
+
+We target a **collateralization ratio of 150%**:
+- $100M bridged value
+- $150M in staked LUX
+
+Slashing makes attacks unprofitable.
+
+## Supported Routes
+
+**Live now:**
+- Lux <-> Ethereum
+- Lux <-> Bitcoin (via wrapped BTC)
+
+**Coming Q4 2021:**
+- Lux <-> Polygon
+- Lux <-> BSC
+- Lux <-> Solana
+
+## Performance
+
+| Metric | Lux -> ETH | ETH -> Lux |
+|--------|------------|------------|
+| Confirmation time | 7 days | ~15 minutes |
+| Gas cost (ETH) | ~0.01 ETH | - |
+| Gas cost (LUX) | - | ~0.1 LUX |
+| Relayer fee | 0.1% | 0.1% |
+
+The 7-day delay for Lux->ETH is the fraud proof window. For users needing faster transfers, liquidity pools provide instant swaps (with higher fees).
+
+## Fast Path: Liquidity Pools
+
+For instant transfers, liquidity providers maintain pools on both chains:
+
+```
+User wants: 100 LUX -> 100 wLUX (instant)
+
+1. User sends 100 LUX to LP on Lux
+2. LP sends 100 wLUX to user on Ethereum (instant)
+3. LP uses slow path to rebalance (7 days)
+
+Fee: 0.3% (market-determined)
+```
+
+## Bridge Dashboard
+
+Monitor bridge activity: [bridge.lux.network](https://bridge.lux.network)
+
+- Total bridged value: $247M
+- Active relayers: 23
+- Total stake: $412M
+- Successful transfers: 89,432
+- Fraud challenges: 0
+
+## Get Started
+
+**For users:**
+1. Visit [bridge.lux.network](https://bridge.lux.network)
+2. Connect wallets on both chains
+3. Select asset and amount
+4. Approve and bridge
+
+**For relayers:**
+1. Stake minimum 10,000 LUX
+2. Run relayer software
+3. Earn fees from successful relays
+
+Documentation: [docs.lux.network/bridge](https://docs.lux.network/bridge)
+
+---
+
+*Bridge security audits by Trail of Bits and Quantstamp available at [security.lux.network](https://security.lux.network)*

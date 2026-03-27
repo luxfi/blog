@@ -1,0 +1,269 @@
+---
+title: "Post-Quantum Roadmap: Preparing for the Cryptographic Transition"
+date: 2022-03-16T10:00:00-08:00
+draft: false
+author: "Zach Kelling"
+tags: ["post-quantum", "cryptography", "security", "roadmap"]
+categories: ["Technical"]
+description: "Lux Network's comprehensive plan for transitioning to quantum-resistant cryptography before large-scale quantum computers become a threat."
+---
+
+Quantum computing advances faster than most anticipate. While cryptographically relevant quantum computers remain years away, the transition to post-quantum cryptography must begin now. Today we publish Lux Network's post-quantum roadmap.
+
+## The Quantum Threat
+
+Current blockchain cryptography relies on two assumptions:
+
+1. **ECDSA signatures**: Breaking the discrete logarithm problem on elliptic curves is computationally infeasible
+2. **Hash functions**: Finding collisions in SHA-256/Keccak is computationally infeasible
+
+Quantum computers with sufficient qubits can break (1) using Shor's algorithm. Fortunately, (2) remains secure against known quantum attacks (Grover's algorithm only provides quadratic speedup).
+
+### Timeline Estimates
+
+| Milestone | Optimistic | Conservative |
+|-----------|------------|--------------|
+| 1,000 logical qubits | 2025 | 2028 |
+| 4,000 logical qubits (ECDSA breakable) | 2028 | 2035 |
+| 10,000 logical qubits | 2032 | 2040+ |
+
+We target readiness by 2026, providing margin against optimistic timelines.
+
+## Current Vulnerability Assessment
+
+### Signature Schemes
+
+**At risk:**
+- secp256k1 ECDSA (wallet signatures)
+- Ed25519 (node identity)
+- BLS (aggregated signatures)
+
+**Secure:**
+- SHA-256, SHA-3 (hash functions)
+- Merkle trees (data structures)
+
+### Attack Scenarios
+
+**Harvest Now, Decrypt Later:**
+An adversary records encrypted/signed data today, waits for quantum computers, then:
+- Derives private keys from public keys
+- Forges signatures on historical transactions
+- Potentially steals funds from addresses that have ever transacted
+
+This is why we act now, not when quantum computers arrive.
+
+## NIST Post-Quantum Standards
+
+NIST finalized its first post-quantum standards in 2022:
+
+### Digital Signatures
+
+| Algorithm | Type | Signature Size | Public Key | Security |
+|-----------|------|----------------|------------|----------|
+| ML-DSA (Dilithium) | Lattice | 2.4 KB | 1.3 KB | 128-bit |
+| SLH-DSA (SPHINCS+) | Hash-based | 17-50 KB | 32 B | 128-256 bit |
+| FALCON | Lattice | 0.7 KB | 0.9 KB | 128-bit |
+
+### Key Encapsulation (for encryption)
+
+| Algorithm | Type | Ciphertext | Public Key | Security |
+|-----------|------|------------|------------|----------|
+| ML-KEM (Kyber) | Lattice | 1 KB | 0.8 KB | 128-bit |
+
+## Lux Post-Quantum Architecture
+
+### Phase 1: Hybrid Signatures (2022-2023)
+
+Deploy hybrid signatures combining classical and post-quantum schemes:
+
+```
+HybridSignature = ECDSA_sig || ML-DSA_sig
+HybridPublicKey = ECDSA_pk || ML-DSA_pk
+```
+
+Verification requires both signatures to be valid:
+
+```go
+func VerifyHybrid(msg, sig []byte, pk HybridPublicKey) bool {
+    ecdsaSig, mldsaSig := split(sig)
+
+    // Both must pass
+    return VerifyECDSA(msg, ecdsaSig, pk.ECDSA) &&
+           VerifyMLDSA(msg, mldsaSig, pk.MLDSA)
+}
+```
+
+Benefits:
+- Security is the stronger of the two schemes
+- If ML-DSA has undiscovered weaknesses, ECDSA protects us
+- If quantum computers arrive early, ML-DSA protects us
+
+### Phase 2: Address Migration (2023-2024)
+
+Introduce new address format supporting post-quantum keys:
+
+```
+Classical address (current):
+0x742d35Cc6634C0532925a3b844Bc9e7595f8fE38
+
+Post-quantum address:
+lux1pq_[base58(ML-DSA_public_key_hash)]
+```
+
+Migration path:
+1. Users generate new PQ addresses
+2. Move funds from classical to PQ addresses
+3. Classical addresses remain functional but deprecated
+
+### Phase 3: Consensus Transition (2024-2025)
+
+Migrate validator signatures to post-quantum:
+
+```go
+type ValidatorSignature struct {
+    // Phase 1: Both required
+    ECDSASig  []byte
+    MLDSASig  []byte
+
+    // Phase 2: Only PQ required
+    // ECDSASig  []byte  // Deprecated
+    // MLDSASig  []byte
+}
+```
+
+Consensus messages increase in size:
+- Current: ~100 bytes per signature
+- Post-quantum: ~2,500 bytes per signature
+
+Network upgrades required:
+- Increased block size limits
+- Optimized signature aggregation
+- Higher bandwidth requirements for validators
+
+### Phase 4: Full Transition (2025-2026)
+
+Complete migration:
+- Deprecate ECDSA-only addresses
+- Require PQ signatures for all transactions
+- Update all smart contract signature verification
+
+## Implementation Details
+
+### Signature Verification Precompile
+
+New precompile for efficient PQ signature verification:
+
+```solidity
+// Address: 0x0100000000000000000000000000000000000010
+interface IMLDSAVerify {
+    function verify(
+        bytes32 messageHash,
+        bytes calldata signature,
+        bytes calldata publicKey
+    ) external view returns (bool);
+}
+
+contract PQWallet {
+    IMLDSAVerify constant MLDSA = IMLDSAVerify(
+        0x0100000000000000000000000000000000000010
+    );
+
+    bytes public publicKey;
+
+    function execute(
+        address to,
+        bytes calldata data,
+        bytes calldata signature
+    ) external {
+        bytes32 hash = keccak256(abi.encode(to, data, nonce++));
+        require(MLDSA.verify(hash, signature, publicKey), "Invalid signature");
+
+        (bool success,) = to.call(data);
+        require(success, "Execution failed");
+    }
+}
+```
+
+### Wallet Integration
+
+Hardware wallets will need firmware updates:
+
+```
+Ledger: PQ support announced for 2024
+Trezor: Research phase
+GridPlus: Lattice-based crypto planned
+```
+
+Software wallets (MetaMask, etc.) will integrate through library updates.
+
+### State Size Considerations
+
+Post-quantum keys are larger:
+
+| Item | Current | Post-Quantum | Increase |
+|------|---------|--------------|----------|
+| Address | 20 B | 20 B | 0% |
+| Public key | 33 B | 1,312 B | 40x |
+| Signature | 65 B | 2,420 B | 37x |
+
+Mitigations:
+- Public keys only stored when needed
+- Signature aggregation where possible
+- State rent for inactive accounts
+
+## Research Partnerships
+
+We're collaborating with:
+
+- **NIST**: Early implementer feedback program
+- **Academic institutions**: Performance optimization research
+- **Hardware manufacturers**: Acceleration development
+
+## Timeline Summary
+
+```
+2022 Q2: Research complete, algorithms selected
+2022 Q4: Hybrid signature prototype on testnet
+2023 Q2: Hybrid signatures mainnet (opt-in)
+2023 Q4: PQ address format deployed
+2024 Q2: Consensus PQ signatures (testnet)
+2024 Q4: Consensus PQ signatures (mainnet)
+2025 Q2: Full PQ transaction support
+2026 Q1: Classical deprecation begins
+```
+
+## Recommendations for Users
+
+**Now:**
+1. Avoid reusing addresses (limits exposure)
+2. Use fresh addresses for large holdings
+3. Monitor announcements for wallet updates
+
+**2023-2024:**
+1. Migrate to PQ addresses when available
+2. Move funds from high-value classical addresses
+3. Update hardware wallet firmware
+
+**2025+:**
+1. Complete migration from classical addresses
+2. Verify all wallets support PQ signatures
+
+## Open Questions
+
+Several areas require further research:
+
+1. **Aggregation**: Can we aggregate ML-DSA signatures efficiently?
+2. **Smart contracts**: How to handle contracts with hardcoded signature verification?
+3. **Cross-chain**: How do PQ bridges work with non-PQ chains?
+
+We will publish updates as solutions emerge.
+
+## Conclusion
+
+The quantum threat is real but manageable with preparation. By starting the transition now, Lux Network will be ready years before cryptographically relevant quantum computers exist.
+
+Security is not a feature. It's the foundation.
+
+---
+
+*For cryptography inquiries: security@lux.network*

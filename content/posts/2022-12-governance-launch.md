@@ -1,0 +1,456 @@
+---
+title: "Governance Launch: Decentralized Protocol Control"
+date: 2022-12-07T10:00:00-08:00
+draft: false
+author: "Zach Kelling"
+tags: ["governance", "decentralization", "dao", "announcement"]
+categories: ["Announcements"]
+description: "Lux Network governance is now live. LUX holders can propose and vote on protocol changes, treasury allocations, and network upgrades."
+---
+
+Today we transfer control of Lux Network to its community. Governance is live: LUX holders now direct the protocol's future.
+
+## Why On-Chain Governance?
+
+Blockchains should be credibly neutral. No single entity should control upgrades, parameters, or treasury. On-chain governance provides:
+
+1. **Transparency**: All proposals and votes are public
+2. **Accountability**: Decisions trace to specific stakeholders
+3. **Legitimacy**: Changes reflect community consensus
+4. **Permissionless**: Anyone can propose
+
+## Governance Architecture
+
+```
+┌─────────────────────────────────────────────────┐
+│              Lux Governance                      │
+│                                                  │
+│  ┌─────────────────────────────────────────┐    │
+│  │           LUX Token Holders              │    │
+│  │  - Voting power = staked LUX            │    │
+│  │  - Delegation supported                  │    │
+│  └──────────────────┬──────────────────────┘    │
+│                     │                           │
+│                     ▼                           │
+│  ┌─────────────────────────────────────────┐    │
+│  │           Governor Contract              │    │
+│  │  - Proposal creation                     │    │
+│  │  - Voting                                │    │
+│  │  - Execution                             │    │
+│  └──────────────────┬──────────────────────┘    │
+│                     │                           │
+│         ┌───────────┼───────────┐               │
+│         ▼           ▼           ▼               │
+│    ┌─────────┐ ┌─────────┐ ┌─────────┐         │
+│    │Treasury │ │Parameter│ │Upgrade  │         │
+│    │         │ │Registry │ │Manager  │         │
+│    └─────────┘ └─────────┘ └─────────┘         │
+└─────────────────────────────────────────────────┘
+```
+
+## Governance Scope
+
+### 1. Treasury Management
+
+The protocol treasury holds:
+- **12M LUX** (~$180M at current prices)
+- Accrued from transaction fees (20% allocation)
+- Foundation contribution (initial seed)
+
+Treasury uses:
+- Ecosystem grants
+- Security audits
+- Research funding
+- Infrastructure costs
+- Community initiatives
+
+### 2. Protocol Parameters
+
+Governable parameters include:
+
+| Parameter | Current Value | Range |
+|-----------|---------------|-------|
+| Minimum stake | 2,000 LUX | 1,000 - 10,000 |
+| Delegation fee (min) | 2% | 0% - 10% |
+| Staking reward rate | 8% APY | 2% - 15% |
+| Block gas limit | 15M | 8M - 30M |
+| Base fee floor | 25 nLUX | 1 - 100 nLUX |
+
+### 3. Network Upgrades
+
+Governance approves:
+- Consensus changes
+- VM updates
+- New precompiles
+- Hard forks
+
+All upgrades require supermajority (67%) approval.
+
+## Proposal Lifecycle
+
+```
+                    ┌─────────────┐
+                    │   Draft     │
+                    │  (Off-chain)│
+                    └──────┬──────┘
+                           │ Forum discussion
+                           │ Feedback integration
+                           ▼
+                    ┌─────────────┐
+                    │  Proposal   │
+                    │  Submitted  │
+                    └──────┬──────┘
+                           │ Minimum 100K LUX to propose
+                           │ OR 10 validators
+                           ▼
+                    ┌─────────────┐
+                    │   Review    │
+                    │  (3 days)   │
+                    └──────┬──────┘
+                           │ Technical review
+                           │ Final amendments
+                           ▼
+                    ┌─────────────┐
+                    │   Voting    │
+                    │  (7 days)   │
+                    └──────┬──────┘
+                           │ LUX holders vote
+                           │ Delegated voting
+                           ▼
+              ┌────────────┴────────────┐
+              │                         │
+              ▼                         ▼
+       ┌─────────────┐          ┌─────────────┐
+       │   Passed    │          │   Failed    │
+       │             │          │             │
+       └──────┬──────┘          └─────────────┘
+              │ Quorum: 10% of staked LUX
+              │ Majority: 50%+ (67% for upgrades)
+              ▼
+       ┌─────────────┐
+       │  Timelock   │
+       │  (2 days)   │
+       └──────┬──────┘
+              │ Security delay
+              │ Emergency cancellation possible
+              ▼
+       ┌─────────────┐
+       │  Executed   │
+       │             │
+       └─────────────┘
+```
+
+## Voting Mechanism
+
+### Voting Power
+
+Voting power equals staked LUX:
+
+```solidity
+function getVotes(address account) public view returns (uint256) {
+    // Includes directly staked + delegated
+    return stakedBalance[account] + delegatedBalance[account];
+}
+```
+
+Liquid LUX (unstaked) does not count. This ensures voters have skin in the game.
+
+### Delegation
+
+Delegate your voting power without moving tokens:
+
+```solidity
+contract LuxGovernor {
+    mapping(address => address) public delegates;
+
+    function delegate(address delegatee) external {
+        address oldDelegate = delegates[msg.sender];
+        delegates[msg.sender] = delegatee;
+
+        // Move voting power
+        _moveVotingPower(oldDelegate, delegatee, getStakedBalance(msg.sender));
+
+        emit DelegateChanged(msg.sender, oldDelegate, delegatee);
+    }
+
+    // Delegate by signature (gasless for delegator)
+    function delegateBySig(
+        address delegatee,
+        uint256 nonce,
+        uint256 expiry,
+        uint8 v, bytes32 r, bytes32 s
+    ) external {
+        address signer = ecrecover(
+            keccak256(abi.encode(DELEGATION_TYPEHASH, delegatee, nonce, expiry)),
+            v, r, s
+        );
+        require(nonce == nonces[signer]++, "Invalid nonce");
+        require(block.timestamp <= expiry, "Signature expired");
+
+        _delegate(signer, delegatee);
+    }
+}
+```
+
+### Vote Types
+
+Three voting options:
+
+```solidity
+enum VoteType {
+    Against,  // 0
+    For,      // 1
+    Abstain   // 2 - counts toward quorum but not majority
+}
+```
+
+## Smart Contract Implementation
+
+### Governor Contract
+
+```solidity
+contract LuxGovernor is Governor, GovernorSettings, GovernorVotes, GovernorTimelockControl {
+
+    constructor(
+        IVotes _token,
+        TimelockController _timelock
+    )
+        Governor("Lux Governor")
+        GovernorSettings(
+            1 days,    // voting delay
+            7 days,    // voting period
+            100000e18  // proposal threshold (100K LUX)
+        )
+        GovernorVotes(_token)
+        GovernorTimelockControl(_timelock)
+    {}
+
+    function quorum(uint256 blockNumber) public view override returns (uint256) {
+        // 10% of total staked LUX at snapshot
+        return token.getPastTotalSupply(blockNumber) / 10;
+    }
+
+    function proposalThreshold() public view override returns (uint256) {
+        return 100000e18; // 100K LUX
+    }
+
+    // Proposals with validator backing (10+ validators)
+    function proposeWithValidatorBacking(
+        address[] memory targets,
+        uint256[] memory values,
+        bytes[] memory calldatas,
+        string memory description,
+        bytes[] memory validatorSignatures
+    ) public returns (uint256) {
+        require(validatorSignatures.length >= 10, "Need 10 validators");
+        // Verify validator signatures...
+
+        return _propose(targets, values, calldatas, description, msg.sender);
+    }
+}
+```
+
+### Timelock Controller
+
+```solidity
+contract LuxTimelock is TimelockController {
+    constructor()
+        TimelockController(
+            2 days,           // minimum delay
+            new address[](0), // proposers (set by governor)
+            new address[](0), // executors (set by governor)
+            address(0)        // no admin
+        )
+    {}
+}
+```
+
+## Treasury Contract
+
+```solidity
+contract LuxTreasury {
+    ILuxGovernor public governor;
+
+    // Only callable via governance
+    modifier onlyGovernance() {
+        require(msg.sender == address(governor.timelock()), "Only governance");
+        _;
+    }
+
+    function transfer(
+        address token,
+        address recipient,
+        uint256 amount
+    ) external onlyGovernance {
+        IERC20(token).transfer(recipient, amount);
+        emit TreasuryTransfer(token, recipient, amount);
+    }
+
+    function approveGrant(
+        address grantee,
+        uint256 amount,
+        string calldata purpose
+    ) external onlyGovernance {
+        grants[grantee] = Grant({
+            amount: amount,
+            remaining: amount,
+            purpose: purpose
+        });
+        emit GrantApproved(grantee, amount, purpose);
+    }
+}
+```
+
+## First Proposals
+
+Governance launches with three initial proposals:
+
+### LIP-1: Reduce Minimum Stake
+
+**Proposal**: Reduce minimum validator stake from 2,000 to 1,500 LUX
+
+**Rationale**: Lower barrier to entry for validators while maintaining security through total stake value.
+
+**Status**: Voting live
+
+### LIP-2: Ecosystem Grants Program
+
+**Proposal**: Allocate 1M LUX for ecosystem grants over 12 months
+
+**Categories**:
+- Developer tooling (300K)
+- DeFi protocols (300K)
+- Infrastructure (200K)
+- Education (200K)
+
+**Status**: Voting live
+
+### LIP-3: Fee Burn Mechanism
+
+**Proposal**: Burn 50% of base fees (currently 100% to validators)
+
+**Impact**: Deflationary pressure on LUX supply
+
+**Status**: Review phase
+
+## Governance Dashboard
+
+Track governance activity: [governance.lux.network](https://governance.lux.network)
+
+Current statistics:
+- Active voters: 1,247
+- Total voting power: 45.2M LUX
+- Proposals submitted: 3
+- Proposals passed: 0 (governance just launched)
+
+## Participating in Governance
+
+### 1. Stake LUX
+
+Voting power requires staked LUX:
+
+```bash
+# Via CLI
+lux-cli stake add-validator \
+    --amount 2000 \
+    --duration 365d
+
+# Or delegate to existing validator
+lux-cli stake add-delegator \
+    --validator NodeID-xxx \
+    --amount 100
+```
+
+### 2. Delegate (Optional)
+
+If you don't want to vote directly:
+
+```javascript
+const governor = new ethers.Contract(GOVERNOR_ADDRESS, GOVERNOR_ABI, signer);
+await governor.delegate(trustedDelegateAddress);
+```
+
+### 3. Vote
+
+```javascript
+// Get proposal
+const proposalId = "0x...";
+
+// Cast vote (0 = Against, 1 = For, 2 = Abstain)
+await governor.castVote(proposalId, 1);
+
+// Or with reason
+await governor.castVoteWithReason(
+    proposalId,
+    1,
+    "This proposal improves decentralization"
+);
+```
+
+### 4. Propose
+
+With 100K+ staked LUX:
+
+```javascript
+const targets = [TREASURY_ADDRESS];
+const values = [0];
+const calldatas = [
+    treasury.interface.encodeFunctionData("transfer", [
+        LUX_TOKEN,
+        RECIPIENT,
+        ethers.utils.parseEther("10000")
+    ])
+];
+const description = "# Grant 10K LUX to Project X\n\n## Summary\n...";
+
+await governor.propose(targets, values, calldatas, description);
+```
+
+## Security Measures
+
+### Emergency Actions
+
+A 4-of-7 security multisig can:
+- Cancel malicious proposals (during timelock)
+- Pause contracts (temporary, governance must ratify)
+
+Cannot:
+- Execute proposals
+- Modify parameters
+- Access treasury
+
+### Proposal Validation
+
+Automated checks before voting:
+- Calldata simulation
+- State change analysis
+- Security pattern matching
+
+### Time Delays
+
+All changes have minimum delays:
+- Standard proposals: 2 days
+- Upgrades: 7 days
+- Emergency pause: Immediate (but requires governance ratification within 48h)
+
+## Governance Philosophy
+
+Lux governance follows these principles:
+
+1. **Minimal governance**: Only govern what must be governed
+2. **Informed voting**: Extensive discussion before voting
+3. **Skin in the game**: Only stakers vote
+4. **Patience**: Long voting periods, meaningful timelock
+5. **Transparency**: All discussions public, all votes on-chain
+
+## Join the Discussion
+
+- **Forum**: [forum.lux.network](https://forum.lux.network)
+- **Discord**: #governance channel
+- **Snapshot (signaling)**: [snapshot.org/#/lux](https://snapshot.org/#/lux)
+
+The network belongs to its users. Govern wisely.
+
+---
+
+*Governance documentation: [docs.lux.network/governance](https://docs.lux.network/governance)*

@@ -1,0 +1,184 @@
+---
+title: "EVM Compatibility: Bridging Ecosystems"
+date: 2020-10-14T10:00:00-08:00
+draft: false
+author: "Zach Kelling"
+tags: ["evm", "ethereum", "compatibility", "smart-contracts"]
+categories: ["Technical"]
+description: "Lux Network achieves full EVM compatibility with the C-Chain, enabling seamless migration of Ethereum dApps."
+---
+
+Today we announce full Ethereum Virtual Machine (EVM) compatibility on Lux Network through the **Contract Chain (C-Chain)**. Ethereum developers can now deploy their applications on Lux with minimal changes.
+
+## Why EVM Compatibility?
+
+The Ethereum ecosystem represents years of developer tooling, battle-tested contracts, and proven patterns. Rather than asking developers to learn new paradigms, we bring them a better execution environment that works with their existing tools.
+
+**What works out of the box:**
+- Solidity and Vyper contracts
+- Web3.js and Ethers.js
+- MetaMask and hardware wallets
+- Hardhat, Truffle, Foundry
+- TheGraph indexing
+- OpenZeppelin contracts
+
+## C-Chain Architecture
+
+The C-Chain runs a modified version of go-ethereum (Geth) integrated with Wave consensus:
+
+```
+┌─────────────────────────────────────────┐
+│              C-Chain                     │
+│  ┌─────────────────────────────────┐    │
+│  │          EVM Runtime             │    │
+│  │  ┌─────────┐  ┌─────────────┐   │    │
+│  │  │Solidity │  │ EVM Opcodes │   │    │
+│  │  │ ABI     │  │ (full set)  │   │    │
+│  │  └─────────┘  └─────────────┘   │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │       Coreth (Modified Geth)    │    │
+│  │  - State management             │    │
+│  │  - Transaction pool             │    │
+│  │  - RPC endpoints                │    │
+│  └─────────────────────────────────┘    │
+│  ┌─────────────────────────────────┐    │
+│  │       Wave Consensus            │    │
+│  │  - Block production             │    │
+│  │  - Finality (<2 seconds)        │    │
+│  └─────────────────────────────────┘    │
+└─────────────────────────────────────────┘
+```
+
+## Key Differences from Ethereum
+
+### 1. Instant Finality
+
+Ethereum L1 requires 12+ minutes for probabilistic finality. C-Chain achieves deterministic finality in under 2 seconds.
+
+```javascript
+// On Ethereum: wait for confirmations
+await tx.wait(12);  // ~3 minutes
+
+// On Lux C-Chain: finality is immediate
+await tx.wait(1);   // <2 seconds, final
+```
+
+### 2. Gas Pricing
+
+C-Chain uses a dynamic fee mechanism similar to EIP-1559:
+
+```javascript
+const baseFee = await provider.getGasPrice();
+const maxFee = baseFee.mul(2);
+const maxPriorityFee = ethers.utils.parseUnits("2", "gwei");
+
+const tx = await contract.method({
+    maxFeePerGas: maxFee,
+    maxPriorityFeePerGas: maxPriorityFee
+});
+```
+
+Current average fees are 10-100x lower than Ethereum mainnet.
+
+### 3. Block Time
+
+- Ethereum: ~12 seconds
+- C-Chain: ~2 seconds
+
+### 4. Native Asset
+
+The native asset is LUX (not ETH). Contract addresses and account formats remain identical (0x-prefixed, 20 bytes).
+
+## Migration Guide
+
+### Step 1: Update RPC Endpoint
+
+```javascript
+// Before (Ethereum)
+const provider = new ethers.providers.JsonRpcProvider(
+    "https://mainnet.infura.io/v3/YOUR_KEY"
+);
+
+// After (Lux C-Chain)
+const provider = new ethers.providers.JsonRpcProvider(
+    "https://api.lux.network/ext/bc/C/rpc"
+);
+```
+
+### Step 2: Update Chain ID
+
+```javascript
+const ETHEREUM_CHAIN_ID = 1;
+const LUX_C_CHAIN_ID = 43114;  // Mainnet
+const LUX_TESTNET_ID = 43113;  // Testnet
+```
+
+### Step 3: Deploy
+
+```bash
+# Using Hardhat
+npx hardhat run scripts/deploy.js --network lux
+
+# Using Foundry
+forge create --rpc-url https://api.lux.network/ext/bc/C/rpc \
+    --private-key $PRIVATE_KEY \
+    src/MyContract.sol:MyContract
+```
+
+### Step 4: Verify (Optional)
+
+```bash
+npx hardhat verify --network lux DEPLOYED_ADDRESS
+```
+
+## Precompiled Contracts
+
+C-Chain includes standard Ethereum precompiles plus Lux-specific extensions:
+
+| Address | Contract | Purpose |
+|---------|----------|---------|
+| 0x01 | ecRecover | ECDSA recovery |
+| 0x02 | SHA256 | SHA-256 hash |
+| 0x03 | RIPEMD160 | RIPEMD-160 hash |
+| 0x04 | Identity | Data copy |
+| 0x05 | ModExp | Modular exponentiation |
+| 0x06-0x09 | BN256 | Elliptic curve operations |
+| 0x0100...01 | NativeAssets | Cross-chain transfers |
+| 0x0100...02 | AtomicTx | Atomic operations |
+
+## Performance Benchmarks
+
+Tests conducted on testnet with standard hardware:
+
+| Metric | Ethereum | C-Chain |
+|--------|----------|---------|
+| TPS (simple transfers) | 15-30 | 4,500+ |
+| TPS (Uniswap swaps) | 10-15 | 1,000+ |
+| Block time | 12s | 2s |
+| Finality | 12+ min | <2s |
+| Average gas price | 50+ gwei | 25 nLUX |
+
+## Testnet Access
+
+The C-Chain testnet is now live:
+
+- **RPC**: `https://api.testnet.lux.network/ext/bc/C/rpc`
+- **Chain ID**: 43113
+- **Explorer**: `https://testnet.snowtrace.io`
+- **Faucet**: `https://faucet.lux.network`
+
+## Looking Ahead
+
+EVM compatibility is just the beginning. Future enhancements include:
+
+- Parallel EVM execution
+- Custom precompiles for ZK proofs
+- Cross-subnet contract calls
+- State rent (long-term)
+
+Mainnet launch is scheduled for Q1 2021.
+
+---
+
+*Start building today: [docs.lux.network](https://docs.lux.network)*

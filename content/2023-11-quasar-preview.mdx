@@ -1,0 +1,375 @@
+---
+title: "Quasar Preview: Next-Generation Consensus"
+description: "First look at Quasar, the next evolution of Wave consensus delivering 100,000+ TPS with sub-second finality."
+date: "2023-11-15"
+author: "Zach Kelling"
+tags: ["quasar", "consensus", "performance", "preview"]
+---
+
+Three years ago, we launched Lux Network with Wave consensus, achieving sub-second finality and thousands of transactions per second. Today we preview Quasar, the next evolution that pushes performance by two orders of magnitude.
+
+## The Scaling Challenge
+
+Wave consensus works beautifully for current load:
+- 4,500+ TPS on C-Chain
+- Sub-second finality
+- Thousands of validators
+
+But demand is growing:
+- Real-time gaming requires 50,000+ TPS
+- High-frequency trading demands microsecond latency
+- Global adoption needs millions of TPS
+
+Quasar is our answer.
+
+## Quasar Design Principles
+
+### 1. Parallel Execution
+
+Current model: Sequential block execution
+```
+Block N: [Tx1, Tx2, Tx3, ...] → Execute sequentially
+```
+
+Quasar model: Parallel execution with dependency tracking
+```
+Block N:
+├── Shard A: [Tx1, Tx4, Tx7] → Execute parallel
+├── Shard B: [Tx2, Tx5, Tx8] → Execute parallel
+└── Shard C: [Tx3, Tx6, Tx9] → Execute parallel
+
+Cross-shard: [Tx10 (A→B), Tx11 (B→C)] → Execute after shards
+```
+
+### 2. Optimistic Execution
+
+Don't wait for consensus to start executing:
+
+```
+Timeline:
+t=0ms:   Block proposed
+t=1ms:   Optimistic execution STARTS (assume valid)
+t=50ms:  Execution COMPLETE
+t=200ms: Consensus FINISHES
+t=201ms: Results committed (no re-execution needed)
+
+If consensus fails: Roll back (rare case)
+```
+
+### 3. State Sharding
+
+Partition state across validator subsets:
+
+```
+Global State
+├── Shard 0: Accounts 0x0... - 0x3...
+│   └── Validators: [V1, V5, V9, ...]
+├── Shard 1: Accounts 0x4... - 0x7...
+│   └── Validators: [V2, V6, V10, ...]
+├── Shard 2: Accounts 0x8... - 0xB...
+│   └── Validators: [V3, V7, V11, ...]
+└── Shard 3: Accounts 0xC... - 0xF...
+    └── Validators: [V4, V8, V12, ...]
+```
+
+Each validator only stores 1/4 of state but can validate any transaction via cross-shard proofs.
+
+## Technical Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Quasar                                │
+│                                                              │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                  Sequencer Layer                     │    │
+│  │  - Transaction ordering                              │    │
+│  │  - Dependency analysis                               │    │
+│  │  - Shard routing                                     │    │
+│  └──────────────────────┬──────────────────────────────┘    │
+│                         │                                    │
+│  ┌──────────────────────┴──────────────────────────────┐    │
+│  │               Parallel Execution Layer               │    │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐   │    │
+│  │  │Executor │ │Executor │ │Executor │ │Executor │   │    │
+│  │  │ Shard 0 │ │ Shard 1 │ │ Shard 2 │ │ Shard 3 │   │    │
+│  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘   │    │
+│  └──────────────────────┬──────────────────────────────┘    │
+│                         │                                    │
+│  ┌──────────────────────┴──────────────────────────────┐    │
+│  │                 Consensus Layer                      │    │
+│  │  - Quasar BFT (evolved Wave)                        │    │
+│  │  - Cross-shard coordination                         │    │
+│  │  - Finality attestations                            │    │
+│  └──────────────────────┬──────────────────────────────┘    │
+│                         │                                    │
+│  ┌──────────────────────┴──────────────────────────────┐    │
+│  │                   State Layer                        │    │
+│  │  - Merkle-Patricia sharded tries                    │    │
+│  │  - Cross-shard state proofs                         │    │
+│  │  - Archive nodes (full state)                       │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Quasar BFT Consensus
+
+Evolution of Wave with enhancements:
+
+### Pipelining
+
+Process multiple blocks simultaneously:
+
+```
+Traditional Wave:
+Block 1: [Propose] → [Vote] → [Finalize] → Block 2: [Propose] → ...
+
+Quasar Pipelining:
+Block 1: [Propose] → [Vote] → [Finalize]
+Block 2:            [Propose] → [Vote] → [Finalize]
+Block 3:                       [Propose] → [Vote] → ...
+
+3x throughput improvement from pipelining alone
+```
+
+### Adaptive Sampling
+
+Adjust sample size based on network conditions:
+
+```go
+func (q *QuasarConsensus) adaptiveSampleSize() int {
+    baseK := 20
+
+    // Adjust based on network latency
+    avgLatency := q.metrics.AverageLatency()
+    if avgLatency < 50*time.Millisecond {
+        baseK += 10  // Network is fast, sample more
+    } else if avgLatency > 200*time.Millisecond {
+        baseK -= 5   // Network is slow, sample less
+    }
+
+    // Adjust based on recent disagreement
+    disagreementRate := q.metrics.DisagreementRate()
+    if disagreementRate > 0.01 {
+        baseK += 15  // More disagreement, sample more for safety
+    }
+
+    return clamp(baseK, 10, 50)
+}
+```
+
+### Optimistic Fast Path
+
+Skip full consensus for uncontested blocks:
+
+```
+Normal Path (contested):
+  Propose → 3 rounds of voting → Finalize
+  Latency: ~500ms
+
+Fast Path (uncontested):
+  Propose → 1 round (supermajority) → Finalize
+  Latency: ~150ms
+
+90%+ of blocks use fast path
+```
+
+## Parallel EVM
+
+### Dependency Detection
+
+Static analysis identifies independent transactions:
+
+```go
+type Transaction struct {
+    ReadSet  []Address  // Accounts read from
+    WriteSet []Address  // Accounts written to
+}
+
+func (e *ParallelExecutor) findIndependent(txs []Transaction) [][]Transaction {
+    var batches [][]Transaction
+    var current []Transaction
+
+    for _, tx := range txs {
+        canParallelize := true
+        for _, existing := range current {
+            if conflicts(tx, existing) {
+                canParallelize = false
+                break
+            }
+        }
+
+        if canParallelize {
+            current = append(current, tx)
+        } else {
+            batches = append(batches, current)
+            current = []Transaction{tx}
+        }
+    }
+
+    return batches
+}
+
+func conflicts(a, b Transaction) bool {
+    // Write-write conflict
+    if intersects(a.WriteSet, b.WriteSet) {
+        return true
+    }
+    // Read-write conflict
+    if intersects(a.ReadSet, b.WriteSet) || intersects(a.WriteSet, b.ReadSet) {
+        return true
+    }
+    return false
+}
+```
+
+### Speculative Execution
+
+Execute optimistically, detect conflicts, re-execute if needed:
+
+```go
+func (e *ParallelExecutor) executeSpeculative(txs []Transaction) []Result {
+    results := make([]Result, len(txs))
+
+    // Execute all in parallel
+    var wg sync.WaitGroup
+    for i, tx := range txs {
+        wg.Add(1)
+        go func(i int, tx Transaction) {
+            defer wg.Done()
+            results[i] = e.execute(tx)
+        }(i, tx)
+    }
+    wg.Wait()
+
+    // Validate for conflicts
+    for i := 0; i < len(results); i++ {
+        for j := i + 1; j < len(results); j++ {
+            if conflict := detectConflict(results[i], results[j]); conflict {
+                // Re-execute j with updated state from i
+                results[j] = e.reexecute(txs[j], results[i].State)
+            }
+        }
+    }
+
+    return results
+}
+```
+
+Typical re-execution rate: &lt;5%
+
+## Performance Projections
+
+### Throughput
+
+| Configuration | TPS | Latency |
+|---------------|-----|---------|
+| Current (Wave) | 4,500 | 500ms |
+| Quasar (4 shards) | 40,000 | 300ms |
+| Quasar (16 shards) | 100,000 | 250ms |
+| Quasar (64 shards) | 300,000+ | 200ms |
+
+### Finality
+
+| Scenario | Time |
+|----------|------|
+| Fast path (95% of blocks) | 150ms |
+| Normal path | 400ms |
+| Contested (rare) | 800ms |
+
+### Hardware Requirements
+
+| Role | CPU | RAM | Storage | Network |
+|------|-----|-----|---------|---------|
+| Full validator | 32 cores | 128 GB | 4 TB NVMe | 10 Gbps |
+| Shard validator | 16 cores | 64 GB | 1 TB NVMe | 5 Gbps |
+| Archive node | 64 cores | 256 GB | 16 TB NVMe | 25 Gbps |
+
+## Testnet Preview
+
+Quasar testnet launches today with limited access:
+
+```bash
+# Apply for testnet access
+curl -X POST https://quasar.lux.network/apply \
+    -d '{"email": "you@example.com", "use_case": "..."}'
+
+# Once approved, connect
+lux-cli network join quasar-testnet
+```
+
+Features available on testnet:
+- 4-shard parallel execution
+- Optimistic fast path
+- Basic cross-shard transactions
+
+Coming in Q1 2024:
+- 16+ shards
+- Full state sharding
+- Production-ready consensus
+
+## Migration Path
+
+Quasar maintains full backward compatibility:
+
+### For Users
+- Same addresses
+- Same transaction format
+- Same wallet experience
+
+### For Developers
+- Same RPC API
+- Same contract deployment
+- New: parallel execution hints (optional)
+
+```solidity
+// Optional: Hint for parallel execution
+contract ParallelFriendly {
+    // Declare read/write sets for optimizer
+    /// @parallel-read balances[msg.sender]
+    /// @parallel-write balances[msg.sender], balances[to]
+    function transfer(address to, uint256 amount) external {
+        require(balances[msg.sender] >= amount);
+        balances[msg.sender] -= amount;
+        balances[to] += amount;
+    }
+}
+```
+
+### For Validators
+- Hardware upgrade required
+- New node software
+- Migration tool provided
+
+## Research Papers
+
+Technical details in our papers:
+
+1. "Quasar: Parallel BFT Consensus" - Core protocol
+2. "Speculative Parallel EVM" - Execution model
+3. "Cross-Shard State Proofs" - State management
+
+Available at [research.lux.network](https://research.lux.network)
+
+## Timeline
+
+| Milestone | Date |
+|-----------|------|
+| Testnet preview | Today |
+| Public testnet | Q1 2024 |
+| Security audits | Q2 2024 |
+| Mainnet activation | Q3 2024 |
+
+## Join the Preview
+
+We're looking for:
+- High-throughput applications to stress test
+- Developers to test compatibility
+- Researchers to review the protocol
+
+Apply at [quasar.lux.network](https://quasar.lux.network)
+
+The future of consensus is parallel.
+
+---
+
+*Technical documentation: [docs.lux.network/quasar](https://docs.lux.network/quasar)*

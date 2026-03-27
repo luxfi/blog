@@ -1,0 +1,447 @@
+---
+title: "ServiceNode Network: Decentralized Infrastructure Layer"
+date: 2023-08-23T10:00:00-08:00
+draft: false
+author: "Zach Kelling"
+tags: ["infrastructure", "servicenodes", "decentralization", "announcement"]
+categories: ["Announcements"]
+description: "Introducing ServiceNodes, a decentralized network providing RPC, indexing, and infrastructure services for the Lux ecosystem."
+---
+
+Decentralization is incomplete if applications depend on centralized infrastructure. Today we launch the ServiceNode Network, providing decentralized RPC endpoints, indexing, and data services for Lux applications.
+
+## The Infrastructure Problem
+
+Current blockchain infrastructure is surprisingly centralized:
+
+```
+"Decentralized" Application Stack:
+
+    ┌─────────────────────┐
+    │   User Interface    │
+    └──────────┬──────────┘
+               │ HTTP
+               ▼
+    ┌─────────────────────┐
+    │  Infura / Alchemy   │  ◄── Single point of failure
+    └──────────┬──────────┘
+               │ RPC
+               ▼
+    ┌─────────────────────┐
+    │    Blockchain       │
+    └─────────────────────┘
+```
+
+Problems:
+- **Single point of failure**: Provider outage = app outage
+- **Censorship vector**: Providers can block requests
+- **Data siloing**: Indexing services control query access
+- **Geographic centralization**: Most infra in US/EU data centers
+
+## ServiceNode Architecture
+
+ServiceNodes provide decentralized infrastructure:
+
+```
+                       ServiceNode Network
+    ┌─────────────────────────────────────────────────┐
+    │                                                  │
+    │   ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐       │
+    │   │ SN-1 │  │ SN-2 │  │ SN-3 │  │ SN-N │       │
+    │   │ NYC  │  │ LON  │  │ TOK  │  │ ...  │       │
+    │   └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘       │
+    │      │         │         │         │            │
+    │      └─────────┴────┬────┴─────────┘            │
+    │                     │                           │
+    └─────────────────────┼───────────────────────────┘
+                          │
+                ┌─────────┴─────────┐
+                │   Load Balancer   │
+                │   (Decentralized) │
+                └─────────┬─────────┘
+                          │
+              ┌───────────┴───────────┐
+              │     Application       │
+              └───────────────────────┘
+```
+
+## Services Provided
+
+### 1. RPC Endpoints
+
+Full node RPC access:
+
+```javascript
+// Traditional (centralized)
+const provider = new ethers.JsonRpcProvider("https://api.infura.io/v3/KEY");
+
+// ServiceNode Network (decentralized)
+const provider = new ethers.JsonRpcProvider("https://rpc.lux.services/v1/mainnet");
+// Automatically routes to nearest healthy ServiceNode
+```
+
+Supported methods:
+- All standard Ethereum JSON-RPC
+- Lux-specific extensions (P-Chain, X-Chain)
+- WebSocket subscriptions
+- Archive data (full history)
+
+### 2. Indexing Service
+
+GraphQL API for indexed blockchain data:
+
+```graphql
+query GetUserPositions($user: Address!) {
+  positions(where: { owner: $user }) {
+    id
+    pool {
+      token0 { symbol }
+      token1 { symbol }
+    }
+    liquidity
+    fees {
+      amount0
+      amount1
+    }
+  }
+}
+```
+
+Features:
+- Pre-indexed common patterns (ERC20, ERC721, DEX)
+- Custom indexer deployment
+- Real-time updates via subscriptions
+- Historical snapshots
+
+### 3. Data Availability
+
+Store and retrieve data with proofs:
+
+```javascript
+import { ServiceNode } from '@luxfi/servicenode-sdk';
+
+const sn = new ServiceNode();
+
+// Store data
+const { cid, proof } = await sn.store(data);
+// cid: content identifier
+// proof: on-chain attestation of storage
+
+// Retrieve data
+const retrieved = await sn.retrieve(cid);
+// Verified against on-chain commitment
+
+// Verify availability
+const available = await sn.verify(cid);
+// Checks multiple ServiceNodes can serve the data
+```
+
+### 4. IPFS Gateway
+
+Decentralized IPFS pinning and gateway:
+
+```
+https://ipfs.lux.services/ipfs/QmXxx...
+```
+
+Features:
+- Automatic pinning for Lux-related content
+- CDN acceleration
+- Pin-on-demand API
+- Guaranteed minimum retention
+
+## ServiceNode Requirements
+
+### Hardware Specifications
+
+| Tier | CPU | RAM | Storage | Bandwidth | Stake |
+|------|-----|-----|---------|-----------|-------|
+| Basic | 8 cores | 32 GB | 2 TB NVMe | 1 Gbps | 5,000 LUX |
+| Standard | 16 cores | 64 GB | 4 TB NVMe | 2.5 Gbps | 15,000 LUX |
+| Premium | 32 cores | 128 GB | 8 TB NVMe | 10 Gbps | 50,000 LUX |
+
+### Software Requirements
+
+```yaml
+# servicenode-config.yaml
+node:
+  chain: mainnet
+  archive: true  # Full history
+
+services:
+  rpc:
+    enabled: true
+    rate_limit: 1000  # requests/second
+  indexer:
+    enabled: true
+    subgraphs:
+      - uniswap-v3
+      - aave-v3
+      - custom/my-protocol
+  ipfs:
+    enabled: true
+    pin_quota: 100GB
+
+staking:
+  amount: 15000
+  reward_address: 0x...
+```
+
+### Running a ServiceNode
+
+```bash
+# Install
+curl -sSL https://install.lux.services | bash
+
+# Initialize
+lux-service init --config servicenode-config.yaml
+
+# Register on-chain
+lux-service register --stake 15000
+
+# Start
+lux-service start
+```
+
+## Economic Model
+
+### Revenue Sources
+
+ServiceNodes earn from:
+
+1. **Usage fees**: Per-request payments from applications
+2. **Staking rewards**: Base reward for maintaining uptime
+3. **Data storage fees**: Payment for storing/serving data
+
+### Fee Structure
+
+| Service | Price | Unit |
+|---------|-------|------|
+| RPC request | 0.0001 LUX | per request |
+| GraphQL query | 0.0005 LUX | per query |
+| Data storage | 0.01 LUX | per MB/month |
+| IPFS pin | 0.005 LUX | per MB/month |
+
+### Payment Flow
+
+```
+Application → Payment Channel → ServiceNode
+
+1. App opens payment channel with stake
+2. Each request includes micro-payment
+3. ServiceNode serves request
+4. Channel settled periodically (or on close)
+```
+
+Benefits:
+- No per-transaction gas fees
+- Instant payments
+- Dispute resolution via on-chain proofs
+
+### Slashing Conditions
+
+ServiceNodes stake is slashed for:
+
+| Violation | Slash Amount |
+|-----------|--------------|
+| Extended downtime (>4 hours) | 1% |
+| Serving incorrect data | 10% |
+| Censoring requests | 25% |
+| Collusion (proven) | 100% |
+
+## Quality of Service
+
+### Health Monitoring
+
+Continuous monitoring via sentinel network:
+
+```go
+type HealthCheck struct {
+    NodeID      string
+    Timestamp   time.Time
+    Latency     time.Duration
+    BlockHeight uint64
+    DataHash    Hash  // Spot check of served data
+}
+
+func (s *Sentinel) CheckNode(nodeID string) HealthCheck {
+    // Send test requests
+    // Verify responses
+    // Measure latency
+    // Compare with other nodes
+}
+```
+
+### Reputation System
+
+Nodes build reputation over time:
+
+```solidity
+contract ServiceNodeRegistry {
+    struct Node {
+        address operator;
+        uint256 stake;
+        uint256 uptime;      // Seconds of verified uptime
+        uint256 requests;    // Total requests served
+        uint256 disputes;    // Failed dispute count
+        uint256 reputation;  // Computed score
+    }
+
+    function computeReputation(Node memory node) public pure returns (uint256) {
+        // Higher uptime = higher reputation
+        uint256 uptimeScore = node.uptime / 1 days;
+
+        // More requests = higher reputation
+        uint256 requestScore = sqrt(node.requests);
+
+        // Disputes hurt reputation
+        uint256 disputePenalty = node.disputes * 100;
+
+        return uptimeScore + requestScore - disputePenalty;
+    }
+}
+```
+
+Higher reputation nodes:
+- Receive more traffic
+- Earn higher fees
+- Get priority in disputes
+
+## SDK Integration
+
+### JavaScript/TypeScript
+
+```typescript
+import { LuxServices } from '@luxfi/servicenode-sdk';
+
+const services = new LuxServices({
+    network: 'mainnet',
+    paymentChannel: {
+        privateKey: process.env.PRIVATE_KEY,
+        maxStake: '100'  // LUX
+    }
+});
+
+// RPC with automatic failover
+const provider = services.getRpcProvider();
+const block = await provider.getBlock('latest');
+
+// Indexed queries
+const indexer = services.getIndexer();
+const positions = await indexer.query(`
+    query { positions(owner: "0x...") { ... } }
+`);
+
+// Data storage
+const storage = services.getStorage();
+const cid = await storage.store(myData);
+```
+
+### Python
+
+```python
+from lux_services import ServiceNode
+
+sn = ServiceNode(
+    network='mainnet',
+    private_key=os.environ['PRIVATE_KEY']
+)
+
+# RPC
+web3 = sn.get_web3()
+block = web3.eth.get_block('latest')
+
+# Indexer
+result = sn.query('''
+    query {
+        tokens(first: 10) {
+            symbol
+            totalSupply
+        }
+    }
+''')
+
+# Storage
+cid = sn.store(data)
+retrieved = sn.retrieve(cid)
+```
+
+## Network Statistics
+
+Current network state (as of launch):
+
+```
+ServiceNodes: 47
+  - North America: 18
+  - Europe: 15
+  - Asia: 10
+  - Other: 4
+
+Total Stake: 1.2M LUX ($18M)
+Average Uptime: 99.7%
+Daily Requests: 45M
+Data Stored: 2.3 TB
+```
+
+## Migration Guide
+
+### From Centralized Providers
+
+```javascript
+// Before (Infura)
+const provider = new ethers.providers.InfuraProvider(
+    'mainnet',
+    'YOUR_INFURA_KEY'
+);
+
+// After (ServiceNode)
+const provider = new ethers.providers.JsonRpcProvider(
+    'https://rpc.lux.services/v1/mainnet'
+);
+// No API key needed - pay per use
+```
+
+### From The Graph
+
+```javascript
+// Before (The Graph hosted service)
+const client = new ApolloClient({
+    uri: 'https://api.thegraph.com/subgraphs/name/...'
+});
+
+// After (ServiceNode indexer)
+const client = new ApolloClient({
+    uri: 'https://indexer.lux.services/v1/subgraphs/...'
+});
+// Same GraphQL schema, decentralized backend
+```
+
+## Roadmap
+
+| Milestone | Status |
+|-----------|--------|
+| RPC service launch | Complete |
+| Indexer service launch | Complete |
+| Payment channels | Complete |
+| Data availability | Q4 2023 |
+| Compute service | Q1 2024 |
+| Cross-chain relaying | Q2 2024 |
+
+## Join the Network
+
+**Run a ServiceNode:**
+1. Review requirements: [docs.lux.network/servicenodes](https://docs.lux.network/servicenodes)
+2. Set up hardware
+3. Stake LUX
+4. Start earning
+
+**Use the services:**
+1. Install SDK: `npm install @luxfi/servicenode-sdk`
+2. Fund payment channel
+3. Integrate into your app
+
+Decentralized infrastructure for a decentralized world.
+
+---
+
+*ServiceNode documentation: [docs.lux.network/servicenodes](https://docs.lux.network/servicenodes)*
