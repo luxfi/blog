@@ -141,7 +141,7 @@ func (lc *LightClient) VerifyAvailability(commitment Commitment) bool {
 }
 ```
 
-With 75 samples, probability of false positive (declaring available when >50% missing): < 2^-75
+With 75 samples, probability of false positive (declaring available when >50% missing): &lt; 2^-75
 
 ## Submitting Data
 
@@ -197,7 +197,7 @@ contract RollupContract {
         ILuxDA.BlobHeader memory header = da.getBlobHeader(blobId);
         require(header.blockNumber > 0, "Blob not found");
         require(
-            block.number - header.blockNumber < AVAILABILITY_WINDOW,
+            block.number - header.blockNumber &lt; AVAILABILITY_WINDOW,
             "Blob expired"
         );
 
@@ -232,7 +232,7 @@ Where:
 | Ethereum calldata | $10,000-50,000 | 12 min |
 | Ethereum blobs | $500-2,000 | 12 min |
 | Celestia | $0.50-2 | 12 sec |
-| Lux DA | $0.01-0.10 | <1 sec |
+| Lux DA | $0.01-0.10 | &lt;1 sec |
 
 ### Storage Duration
 
@@ -374,7 +374,7 @@ contract DecentralizedStorage {
         // Split into chunks and submit
         bytes32[] memory blobIds = new bytes32[]((data.length / CHUNK_SIZE) + 1);
 
-        for (uint i = 0; i < blobIds.length; i++) {
+        for (uint i = 0; i &lt; blobIds.length; i++) {
             bytes memory chunk = data[i * CHUNK_SIZE : (i + 1) * CHUNK_SIZE];
             blobIds[i] = da.submitBlob(chunk);
         }
@@ -440,7 +440,7 @@ contract DAFraudProof {
         bytes48[] calldata proofs
     ) external {
         // Verify chunks are authentic
-        for (uint i = 0; i < indices.length; i++) {
+        for (uint i = 0; i &lt; indices.length; i++) {
             require(
                 da.verifyInclusion(blobId, indices[i], chunks[i], proofs[i]),
                 "Invalid chunk"
@@ -475,10 +475,10 @@ contract DAFraudProof {
 
 | Operation | Time |
 |-----------|------|
-| Blob submission | <1s |
-| Blob finality | <2s |
-| Sampling verification | <100ms |
-| Chunk retrieval | <50ms |
+| Blob submission | &lt;1s |
+| Blob finality | &lt;2s |
+| Sampling verification | &lt;100ms |
+| Chunk retrieval | &lt;50ms |
 
 ## Roadmap
 

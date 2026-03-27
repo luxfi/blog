@@ -93,7 +93,7 @@ Traditional AMMs use continuous curves (x * y = k). Trader Joe's Liquidity Book 
 Price Range Bins:
 
 Bin 100: $0.99 - $1.00  [====     ] 40% liquidity
-Bin 101: $1.00 - $1.01  [========] 80% liquidity  <- Current price
+Bin 101: $1.00 - $1.01  [========] 80% liquidity  &lt;- Current price
 Bin 102: $1.01 - $1.02  [======   ] 60% liquidity
 Bin 103: $1.02 - $1.03  [==       ] 20% liquidity
 ```
@@ -189,7 +189,7 @@ contract LimitOrders {
 
     function executeOrder(bytes32 orderId, bytes calldata swapData) external {
         Order memory order = orders[orderId];
-        require(block.timestamp <= order.expiry, "Expired");
+        require(block.timestamp &lt;= order.expiry, "Expired");
 
         // Execute swap
         uint256 amountOut = _executeSwap(order, swapData);

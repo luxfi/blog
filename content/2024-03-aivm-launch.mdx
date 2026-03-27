@@ -110,7 +110,7 @@ contract AIClassifier {
 
         // Find argmax
         int256 maxVal = type(int256).min;
-        for (uint i = 0; i < output.length; i++) {
+        for (uint i = 0; i &lt; output.length; i++) {
             if (output[i] > maxVal) {
                 maxVal = output[i];
                 class = i;
@@ -195,7 +195,7 @@ contract OptimisticAI {
         int256[] calldata correctOutput
     ) external {
         Prediction storage p = predictions[predictionId];
-        require(block.timestamp < p.timestamp + CHALLENGE_PERIOD, "Too late");
+        require(block.timestamp &lt; p.timestamp + CHALLENGE_PERIOD, "Too late");
         require(keccak256(abi.encode(input)) == p.inputHash, "Wrong input");
 
         // Re-run inference on-chain (or verify ZK proof)
@@ -318,7 +318,7 @@ contract InferenceRouter {
         Provider[] memory candidates = getProvidersForModel(modelId);
 
         uint256 bestScore = 0;
-        for (uint i = 0; i < candidates.length; i++) {
+        for (uint i = 0; i &lt; candidates.length; i++) {
             if (candidates[i].latency > maxLatency) continue;
             if (candidates[i].price > maxPrice) continue;
 
@@ -372,7 +372,7 @@ contract AIGatedVault {
         int256[] memory scores = AIVM.infer(classifierModel, features);
 
         // Reject if fraud score is high
-        require(scores[0] < FRAUD_THRESHOLD, "Suspicious activity");
+        require(scores[0] &lt; FRAUD_THRESHOLD, "Suspicious activity");
 
         _deposit(msg.sender, amount);
     }

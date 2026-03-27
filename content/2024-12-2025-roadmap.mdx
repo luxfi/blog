@@ -54,7 +54,7 @@ contract OptimizedToken {
         address[] calldata recipients,
         uint256[] calldata amounts
     ) external {
-        for (uint i = 0; i < recipients.length; i++) {
+        for (uint i = 0; i &lt; recipients.length; i++) {
             // Compiler ensures no cross-iteration conflicts
             balances[recipients[i]] += amounts[i];
         }
@@ -121,10 +121,10 @@ AIVM expansion for large language models:
 
 | Model Size | Support | Inference Time |
 |------------|---------|----------------|
-| <100M params | On-chain | <200ms |
-| 100M-1B params | Verified off-chain | <2s |
-| 1B-10B params | TEE-attested | <10s |
-| 10B+ params | Optimistic + fraud proof | <30s |
+| &lt;100M params | On-chain | &lt;200ms |
+| 100M-1B params | Verified off-chain | &lt;2s |
+| 1B-10B params | TEE-attested | &lt;10s |
+| 10B+ params | Optimistic + fraud proof | &lt;30s |
 
 ### Unified Bridge Protocol v2
 

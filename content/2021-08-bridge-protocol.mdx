@@ -68,7 +68,7 @@ contract LuxBridge {
 
     // Submit new headers (anyone can call)
     function submitHeaders(BlockHeader[] calldata newHeaders) external {
-        for (uint i = 0; i < newHeaders.length; i++) {
+        for (uint i = 0; i &lt; newHeaders.length; i++) {
             require(verifyHeader(newHeaders[i]), "Invalid header");
             headers[newHeaders[i].number] = newHeaders[i];
         }
@@ -81,7 +81,7 @@ contract LuxBridge {
         bytes calldata proof,
         uint256 blockNumber
     ) public view returns (bool) {
-        require(blockNumber <= verifiedHeight, "Block not verified");
+        require(blockNumber &lt;= verifiedHeight, "Block not verified");
         return verifyMerkleProof(
             headers[blockNumber].transactionsRoot,
             txData,
@@ -134,7 +134,7 @@ contract FraudProver {
         bytes calldata fraudProof
     ) external {
         RelayedMessage memory msg = relayedMessages[messageHash];
-        require(block.timestamp < msg.slashableUntil, "Challenge period ended");
+        require(block.timestamp &lt; msg.slashableUntil, "Challenge period ended");
 
         // Verify the fraud proof
         require(verifyFraud(msg, fraudProof), "Not fraudulent");
@@ -229,13 +229,13 @@ Slashing makes attacks unprofitable.
 ## Supported Routes
 
 **Live now:**
-- Lux <-> Ethereum
-- Lux <-> Bitcoin (via wrapped BTC)
+- Lux ↔ Ethereum
+- Lux ↔ Bitcoin (via wrapped BTC)
 
 **Coming Q4 2021:**
-- Lux <-> Polygon
-- Lux <-> BSC
-- Lux <-> Solana
+- Lux ↔ Polygon
+- Lux ↔ BSC
+- Lux ↔ Solana
 
 ## Performance
 

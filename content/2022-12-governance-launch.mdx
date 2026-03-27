@@ -183,7 +183,7 @@ contract LuxGovernor {
             v, r, s
         );
         require(nonce == nonces[signer]++, "Invalid nonce");
-        require(block.timestamp <= expiry, "Signature expired");
+        require(block.timestamp &lt;= expiry, "Signature expired");
 
         _delegate(signer, delegatee);
     }

@@ -110,7 +110,7 @@ type ThresholdSigner struct {
 }
 
 func (ts *ThresholdSigner) Sign(message []byte, participants []PartyID) (*Signature, error) {
-    if len(participants) < ts.Threshold {
+    if len(participants) &lt; ts.Threshold {
         return nil, errors.New("insufficient participants")
     }
 

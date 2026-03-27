@@ -141,7 +141,7 @@ func (q *QuasarConsensus) adaptiveSampleSize() int {
 
     // Adjust based on network latency
     avgLatency := q.metrics.AverageLatency()
-    if avgLatency < 50*time.Millisecond {
+    if avgLatency &lt; 50*time.Millisecond {
         baseK += 10  // Network is fast, sample more
     } else if avgLatency > 200*time.Millisecond {
         baseK -= 5   // Network is slow, sample less
@@ -242,8 +242,8 @@ func (e *ParallelExecutor) executeSpeculative(txs []Transaction) []Result {
     wg.Wait()
 
     // Validate for conflicts
-    for i := 0; i < len(results); i++ {
-        for j := i + 1; j < len(results); j++ {
+    for i := 0; i &lt; len(results); i++ {
+        for j := i + 1; j &lt; len(results); j++ {
             if conflict := detectConflict(results[i], results[j]); conflict {
                 // Re-execute j with updated state from i
                 results[j] = e.reexecute(txs[j], results[i].State)
