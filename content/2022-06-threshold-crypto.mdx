@@ -216,12 +216,12 @@ contract ThresholdTreasury {
 }
 ```
 
-### 4. Cross-Subnet Communication
+### 4. Cross-Chain Communication
 
 Subnets use threshold attestations for cross-chain messages:
 
 ```
-Subnet A                      Subnet B
+Chain A                      Chain B
     │                             │
     │  Message M                  │
     │      │                      │
@@ -236,7 +236,7 @@ Subnet A                      Subnet B
     └──────┼──────────────────────┘
            │
            ▼
-    Subnet B verifies single signature
+    Chain B verifies single signature
     (efficient, ~2.4 KB regardless of validator count)
 ```
 
